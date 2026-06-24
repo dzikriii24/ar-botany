@@ -88,8 +88,14 @@ window.loadEndemicPlants = function() {
     grid.innerHTML = '';
     endemicPlants.forEach((p, idx) => {
         const qrUrl = window.location.origin + '/drop.html?id=' + encodeURIComponent(p.id);
-        grid.innerHTML += createCardHTML(p.name, window.generateStars(p.stars), p.color, `<div class="text-6xl flex items-center justify-center h-full">${p.img}</div>`, `Asal: ${p.region}`, `NO.${String(idx+1).padStart(3, '0')}`, '', qrUrl);
+        grid.innerHTML += createCardHTML(p.name, window.generateStars(p.stars), p.color, `<div class="text-6xl flex items-center justify-center h-full">${p.img}</div>`, `Asal: ${p.region}`, `NO.${String(idx+1).padStart(3, '0')}`, '', qrUrl, p.id);
     });
+    // Inisialisasi preview 3D jika file tree.js telah dimuat (dengan delay agar browser selesai menghitung layout)
+    setTimeout(() => {
+        if (typeof window.init3DCardPreviews === 'function') {
+            window.init3DCardPreviews();
+        }
+    }, 250);
 }
 
 window.loadUserPlants = async function() {
@@ -116,7 +122,7 @@ window.loadUserPlants = async function() {
     }
 }
 
-function createCardHTML(title, stars, bgColorClass, imgContent, attr, num, extraHTML = '', qrUrl = '') {
+function createCardHTML(title, stars, bgColorClass, imgContent, attr, num, extraHTML = '', qrUrl = '', plantId = '') {
     let qrHTML = '';
     if (qrUrl && typeof QRCode !== 'undefined') {
         try {
@@ -131,7 +137,7 @@ function createCardHTML(title, stars, bgColorClass, imgContent, attr, num, extra
         <div class="flip-card h-full w-full" style="min-height: 280px;">
             <div class="flip-card-inner h-full w-full">
                 <!-- FRONT -->
-                <div class="flip-card-front retro-card ${bgColorClass} p-3 flex flex-col justify-between h-full absolute top-0 left-0 w-full">
+                <div class="flip-card-front retro-card ${bgColorClass} p-3 flex flex-col justify-between h-full absolute top-0 left-0 w-full" data-plant-id="${plantId}">
                     <div class="flex justify-between items-start font-black text-sm mb-2 border-b-4 border-black pb-1">
                         <span class="uppercase font-pixel text-[9px] md:text-xs truncate max-w-[70%]">${title}</span>
                         <span>${stars}</span>
@@ -377,6 +383,10 @@ window.initDropMode = async function() {
                 document.querySelectorAll('.drop-drawer-item').forEach(el => el.classList.replace('opacity-100', 'opacity-50'));
                 item.classList.replace('opacity-50', 'opacity-100');
                 window.activeDropImage = p.image_url;
+                window.activeDropPlantId = p.is_endemic ? p.id : null;
+                window.activeDropPlantName = p.plant_name;
+                window.activeDropPlantDesc = p.is_endemic ? "" : (p.description || "Karya lukisan pengguna.");
+                window.activeDropPlantRegion = p.is_endemic ? "" : (p.author_name ? `@${p.author_name}` : "Galeri Pengguna");
             };
             drawer.appendChild(item);
         });
@@ -386,3 +396,176 @@ window.initDropMode = async function() {
         drawer.innerHTML = '<p class="text-white font-bold text-sm px-4 whitespace-nowrap self-center">Belum ada karya komunitas.</p>';
     }
 }
+
+// Pool/manajer renderer aktif untuk membatasi WebGL context maksimal
+const activeRenderers = [];
+const MAX_ACTIVE_RENDERERS = 5; // Batas aman untuk semua perangkat & browser
+
+function registerActiveRenderer(card, cleanupFunc) {
+    // Jika sudah melebihi batas, hapus renderer paling lama (LRU/FIFO)
+    if (activeRenderers.length >= MAX_ACTIVE_RENDERERS) {
+        const oldest = activeRenderers.shift();
+        if (oldest && oldest.cleanup) {
+            oldest.cleanup();
+        }
+    }
+    activeRenderers.push({ card, cleanup: cleanupFunc });
+}
+
+function unregisterActiveRenderer(card) {
+    const index = activeRenderers.findIndex(item => item.card === card);
+    if (index !== -1) {
+        activeRenderers.splice(index, 1);
+    }
+}
+
+// --- INITIALIZE 3D CARD PREVIEWS IN COLLECTION ---
+window.init3DCardPreviews = function() {
+    if (typeof THREE === 'undefined' || typeof window.PlantModels === 'undefined') {
+        console.warn("Three.js or PlantModels is not loaded yet.");
+        return;
+    }
+
+    const cards = document.querySelectorAll('.flip-card-front[data-plant-id]');
+    
+    const observerOptions = {
+        root: null, // viewport
+        rootMargin: '0px',
+        threshold: 0.01
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            const card = entry.target;
+            const plantId = card.getAttribute('data-plant-id');
+            if (!plantId) return;
+            const imgContainer = card.querySelector('.aspect-square');
+            if (!imgContainer) return;
+
+            if (entry.isIntersecting) {
+                // Inisialisasi renderer jika belum diinisialisasi
+                if (imgContainer.querySelector('canvas')) return;
+
+                const originalContent = imgContainer.innerHTML;
+                imgContainer.dataset.originalContent = originalContent; // Simpan fallback
+                imgContainer.innerHTML = ''; // Kosongkan
+
+                // Setup Scene
+                const scene = new THREE.Scene();
+                
+                // Setup Kamera
+                const width = imgContainer.clientWidth || 180;
+                const height = imgContainer.clientHeight || 180;
+                const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 10);
+                camera.position.set(0, 1.2, 2.5);
+                camera.lookAt(0, 0.7, 0);
+
+                // Setup WebGL Renderer
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setSize(width, height);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+                renderer.shadowMap.enabled = true;
+                imgContainer.appendChild(renderer.domElement);
+
+                // Lighting
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+                scene.add(ambientLight);
+
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+                dirLight.position.set(3, 5, 2);
+                scene.add(dirLight);
+
+                // Load 3D Model
+                let model;
+                try {
+                    model = window.PlantModels.createModel(plantId);
+                    scene.add(model);
+                } catch(e) {
+                    console.error("Failed to load 3D model in card:", plantId, e);
+                    imgContainer.innerHTML = originalContent; // Fallback
+                    return;
+                }
+
+                // Pointer/Drag Interaction
+                let isDragging = false;
+                let previousMousePosition = { x: 0, y: 0 };
+
+                const handleDown = (e) => {
+                    isDragging = true;
+                    previousMousePosition = {
+                        x: e.touches ? e.touches[0].clientX : e.clientX,
+                        y: e.touches ? e.touches[0].clientY : e.clientY
+                    };
+                };
+
+                const handleMove = (e) => {
+                    if (!isDragging) return;
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const deltaX = clientX - previousMousePosition.x;
+                    model.rotation.y += deltaX * 0.015;
+                    previousMousePosition.x = clientX;
+                };
+
+                const handleUp = () => {
+                    isDragging = false;
+                };
+
+                renderer.domElement.addEventListener('mousedown', handleDown);
+                renderer.domElement.addEventListener('touchstart', handleDown, { passive: true });
+                
+                window.addEventListener('mousemove', handleMove);
+                window.addEventListener('touchmove', handleMove, { passive: true });
+                window.addEventListener('mouseup', handleUp);
+                window.addEventListener('touchend', handleUp);
+
+                // Animation loop
+                let animId;
+                const animate = () => {
+                    animId = requestAnimationFrame(animate);
+                    if (!isDragging) {
+                        model.rotation.y += 0.012; // Auto rotate slow
+                    }
+                    renderer.render(scene, camera);
+                };
+                animate();
+
+                // Fungsi pembersihan (cleanup)
+                const cleanup = () => {
+                    cancelAnimationFrame(animId);
+                    if (renderer) {
+                        renderer.domElement.removeEventListener('mousedown', handleDown);
+                        renderer.domElement.removeEventListener('touchstart', handleDown);
+                        window.removeEventListener('mousemove', handleMove);
+                        window.removeEventListener('touchmove', handleMove);
+                        window.removeEventListener('mouseup', handleUp);
+                        window.removeEventListener('touchend', handleUp);
+                        renderer.dispose();
+                    }
+                    if (imgContainer.dataset.originalContent) {
+                        imgContainer.innerHTML = imgContainer.dataset.originalContent;
+                    }
+                    delete imgContainer._cleanup;
+                };
+
+                imgContainer._cleanup = cleanup;
+
+                // Daftarkan ke manajer renderer aktif
+                registerActiveRenderer(card, cleanup);
+
+            } else {
+                // Keluar dari viewport: Bersihkan
+                if (imgContainer._cleanup) {
+                    imgContainer._cleanup();
+                    unregisterActiveRenderer(card);
+                }
+            }
+        });
+    }, observerOptions);
+
+    cards.forEach(card => {
+        if (card.dataset.observed === 'true') return;
+        card.dataset.observed = 'true';
+        observer.observe(card);
+    });
+};
+

@@ -1,5 +1,5 @@
 // WebXR Markerless Hit-Test Logic
-AFRAME.registerComponent('ar-hit-test', {
+AFRAME.registerComponent('custom-ar-hit-test', {
     schema: { target: { type: 'selector' } },
     init: function () {
         this.xrHitTestSource = null;
@@ -39,25 +39,69 @@ AFRAME.registerComponent('ar-hit-test', {
     }
 });
 
+// Komponen A-Frame untuk menampilkan Model 3D Prosedural Three.js
+AFRAME.registerComponent('plant-3d', {
+    schema: {
+        type: { type: 'string', default: 'ulin' }
+    },
+    init: function () {
+        if (window.PlantModels && typeof window.PlantModels.createModel === 'function') {
+            try {
+                // Buat model Three.js prosedural
+                const model = window.PlantModels.createModel(this.data.type);
+                
+                // Tambahkan model ke A-Frame Object3D hierarchy
+                this.el.setObject3D('mesh', model);
+                
+                // Set skala default agar pas di dunia nyata (sekitar 0.6 meter tinggi)
+                this.el.setAttribute('scale', '0.6 0.6 0.6');
+            } catch (e) {
+                console.error("Gagal merender model 3D di A-Frame:", e);
+            }
+        } else {
+            console.warn("Library PlantModels tidak ditemukan.");
+        }
+    }
+});
+
+// Komponen A-Frame untuk mendeteksi klik pada tanaman dan memicu pop-up deskripsi
+AFRAME.registerComponent('clickable-plant', {
+    schema: {
+        name: { type: 'string', default: 'Tanaman' },
+        region: { type: 'string', default: 'Indonesia' },
+        desc: { type: 'string', default: 'Deskripsi tidak tersedia.' }
+    },
+    init: function () {
+        // Event listener klik / sentuh
+        this.el.addEventListener('click', (evt) => {
+            evt.stopPropagation();
+            
+            const popup = document.getElementById('plant-desc-popup');
+            if (popup) {
+                document.getElementById('popup-plant-title').innerText = this.data.name;
+                document.getElementById('popup-plant-region').innerText = `Asal: ${this.data.region}`;
+                document.getElementById('popup-plant-desc').innerText = this.data.desc;
+                popup.classList.remove('hidden');
+            }
+        });
+    }
+});
+
 AFRAME.registerComponent('drop-handler', {
     init: function () {
         this.reticle = document.getElementById('reticle');
         
         // Gunakan fungsi terpusat untuk melempar objek
         const performDrop = (e) => {
-            // (Optional) if (!this.el.is('ar-mode')) return; 
-            // Dihapus agar bisa di-test di laptop/layar hitam biasa.
-
-            // Jika yang diklik adalah UI (laci, tombol, navbar), abaikan!
+            // Jika yang diklik adalah UI (laci, tombol, navbar, popup), abaikan!
             if (e && e.target) {
                 if (e.target.closest('.pointer-events-auto') || e.target.closest('nav') || e.target.closest('button')) {
                     return;
                 }
             }
             
-            // Check if user has selected an image from the drawer
+            // Periksa apakah user sudah memilih tanaman di laci
             if (!window.activeDropImage) {
-                // Hanya alert jika ini bukan event otomatis
                 if (e) alert("Pilih gambar dari laci koleksi di bawah terlebih dahulu!");
                 return;
             }
@@ -71,12 +115,11 @@ AFRAME.registerComponent('drop-handler', {
                 const cameraObj = document.querySelector('[camera]').object3D;
                 const pos = new THREE.Vector3(0, 0, -1.5);
                 pos.applyMatrix4(cameraObj.matrixWorld);
-                // Turunkan sedikit dari ketinggian mata agar terlihat seperti di tanah/meja
-                pos.y -= 0.5; 
+                pos.y -= 0.5; // Turunkan sedikit agar terlihat seperti di lantai
                 position = pos;
             }
             
-            // Create an anchor entity
+            // Buat entitas kontainer jangkar (anchor)
             const standee = document.createElement('a-entity');
             if (position.x !== undefined) {
                 standee.setAttribute('position', `${position.x} ${position.y} ${position.z}`);
@@ -84,37 +127,60 @@ AFRAME.registerComponent('drop-handler', {
                 standee.setAttribute('position', position);
             }
             
-            // Create the 2D billboard (Pop-up Book effect)
-            const img = document.createElement('a-image');
-            img.setAttribute('src', window.activeDropImage);
-            
-            // Keep the aspect ratio square for now, or you could read the natural dimensions.
-            img.setAttribute('width', '0.5'); 
-            img.setAttribute('height', '0.5');
-            
-            // Lift the image up by half its height so it stands ON the floor, not halfway through it
-            img.setAttribute('position', '0 0.25 0');
-            
-            // Make it look at the camera so it's always readable like a standee
-            img.setAttribute('look-at', '[camera]');
+            // JIKA ini tanaman endemik (memiliki 3D Model prosedural)
+            if (window.activeDropPlantId) {
+                const details = window.PlantModels.getDetails(window.activeDropPlantId);
+                standee.setAttribute('clickable-plant', `name: ${details.name}; region: ${details.region}; desc: ${details.desc}`);
 
-            // Tambahkan sebuah kotak alas (base) hijau agar selalu terlihat 
-            // meskipun gambar aslinya gagal dimuat (CORS / error jaringan)
-            const baseBox = document.createElement('a-box');
-            baseBox.setAttribute('color', '#4CAF50');
-            baseBox.setAttribute('depth', '0.2');
-            baseBox.setAttribute('height', '0.05');
-            baseBox.setAttribute('width', '0.5');
-            baseBox.setAttribute('position', '0 0.025 0'); // Tepat di lantai
+                // 1. Buat alas rumput bulat hijau di lantai
+                const baseBox = document.createElement('a-cylinder');
+                baseBox.setAttribute('color', '#4CAF50');
+                baseBox.setAttribute('radius', '0.25');
+                baseBox.setAttribute('height', '0.02');
+                baseBox.setAttribute('position', '0 0.01 0');
+                baseBox.classList.add('collidable');
+                standee.appendChild(baseBox);
+
+                // 2. Buat objek 3D tanaman
+                const plant = document.createElement('a-entity');
+                plant.setAttribute('plant-3d', `type: ${window.activeDropPlantId}`);
+                plant.setAttribute('position', '0 0.02 0');
+                plant.classList.add('collidable');
+                standee.appendChild(plant);
+
+            } else {
+                // FALLBACK: JIKA ini karya pengguna (gambar hasil menggambar di Canvas)
+                const plantName = window.activeDropPlantName || 'Karya Tanaman';
+                const plantDesc = window.activeDropPlantDesc || 'Hasil lukisan kreatif dari kanvas digital.';
+                const plantRegion = window.activeDropPlantRegion || 'Galeri Pengguna';
+                standee.setAttribute('clickable-plant', `name: ${plantName}; region: ${plantRegion}; desc: ${plantDesc}`);
+
+                // Buat 2D billboard (Pop-up Book effect)
+                const img = document.createElement('a-image');
+                img.setAttribute('src', window.activeDropImage);
+                img.setAttribute('width', '0.5'); 
+                img.setAttribute('height', '0.5');
+                img.setAttribute('position', '0 0.25 0'); // Berdiri di atas lantai
+                img.setAttribute('look-at', '[camera]');
+                img.classList.add('collidable');
+
+                // Alas kotak hijau
+                const baseBox = document.createElement('a-box');
+                baseBox.setAttribute('color', '#4CAF50');
+                baseBox.setAttribute('depth', '0.2');
+                baseBox.setAttribute('height', '0.05');
+                baseBox.setAttribute('width', '0.5');
+                baseBox.setAttribute('position', '0 0.025 0');
+                baseBox.classList.add('collidable');
+                
+                standee.appendChild(baseBox);
+                standee.appendChild(img);
+            }
             
-            // Attach to scene
-            standee.appendChild(baseBox);
-            standee.appendChild(img);
+            // Tempelkan entitas ke scene A-Frame
             this.el.sceneEl.appendChild(standee);
             
-            // Optional: Provide feedback or sound
-            // Alert sederhana untuk konfirmasi bahwa sistem drop mendeteksi ketukan
-            // (akan hilang perlahan tapi berguna untuk debugging)
+            // Flash feedback "DROPPED!"
             const flash = document.createElement('div');
             flash.innerText = "DROPPED!";
             flash.className = "absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-retro-green text-white font-bold px-4 py-2 rounded-lg z-50 pointer-events-none transition-opacity duration-1000";
@@ -123,7 +189,7 @@ AFRAME.registerComponent('drop-handler', {
             setTimeout(() => flash.remove(), 1500);
         };
 
-        // Daftarkan semua jenis event tap/click yang mungkin terjadi di HP/Tablet/Desktop
+        // Daftarkan semua jenis event tap/click
         this.el.sceneEl.addEventListener('select', performDrop);
         window.addEventListener('touchstart', performDrop, { passive: false });
         window.addEventListener('click', performDrop);
