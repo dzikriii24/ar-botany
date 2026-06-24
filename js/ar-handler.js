@@ -1,9 +1,13 @@
 // Mengurangi jitter visual dengan Exponential Smoothing Filter
-let targetPosition = new THREE.Vector3();
-let currentPosition = new THREE.Vector3();
+let targetPosition;
+let currentPosition;
 const alpha = 0.2; // Faktor kehalusan filter smoothing (0 < alpha <= 1)
 
 AFRAME.registerComponent('smoothing-handler', {
+  init: function () {
+    targetPosition = new THREE.Vector3();
+    currentPosition = new THREE.Vector3();
+  },
   tick: function () {
     let markerEl = document.querySelector('#botani-marker');
     let modelEntity = document.querySelector('#render-object');

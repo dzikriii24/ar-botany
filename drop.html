@@ -71,6 +71,7 @@
     <!-- A-Frame & Extras -->
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+    <script src="assets/treejs/tree.js"></script>
     <script src="js/drop-handler.js?v=2"></script>
 </head>
 <body class="m-0 overflow-hidden text-gray-900 bg-retro-bg">
@@ -86,36 +87,17 @@
         
         <!-- AR Overlay UI -->
         <div id="scanner-ui" class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 mt-20">
-            <!-- Top Right: Hapus Semua Button -->
-            <div class="flex justify-end pointer-events-none">
-                <button id="btn-clear-all" class="retro-btn bg-retro-red text-white px-3 py-1.5 text-xs shadow-retro pointer-events-auto hidden">DELETE GARDEN</button>
+            <!-- Pop-up Deskripsi Tanaman (Awalnya tersembunyi) -->
+            <div id="plant-desc-popup" class="w-full pointer-events-auto hidden mb-auto">
+                <div class="retro-card bg-retro-yellow p-4 relative max-w-md mx-auto text-left border-4 border-black shadow-retro">
+                    <button onclick="document.getElementById('plant-desc-popup').classList.add('hidden')" class="absolute top-2 right-2 w-7 h-7 flex items-center justify-center retro-btn bg-white font-black text-sm leading-none">&times;</button>
+                    <h3 id="popup-plant-title" class="font-pixel text-[11px] uppercase text-retro-red mb-1">Nama Tanaman</h3>
+                    <p id="popup-plant-region" class="text-xs font-black text-gray-700 mb-2">Asal: -</p>
+                    <p id="popup-plant-desc" class="text-xs leading-relaxed font-bold text-black">Deskripsi...</p>
+                </div>
             </div>
-
-            <div class="text-center mt-auto mb-10 pointer-events-none flex flex-col gap-2 items-center w-full">
-                <!-- Drop Confirmation Panel -->
-                <div id="drop-confirm-panel" class="retro-card bg-retro-yellow p-4 max-w-xs shadow-retro font-bold text-center pointer-events-auto hidden">
-                    <p class="text-xs mb-2">Tempatkan tanaman di lokasi ini?</p>
-                    <div class="flex gap-2 justify-center">
-                        <button id="btn-confirm-yes" class="retro-btn bg-retro-green text-white px-4 py-1.5 text-xs">YA, PLACE</button>
-                        <button id="btn-confirm-no" class="retro-btn bg-retro-red text-white px-4 py-1.5 text-xs">BATAL</button>
-                    </div>
-                </div>
-
-                <!-- Delete Confirmation Panel -->
-                <div id="delete-confirm-panel" class="retro-card bg-retro-purple p-4 max-w-xs shadow-retro font-bold text-center pointer-events-auto hidden">
-                    <p class="text-xs text-white mb-2">Hapus tanaman yang dipilih ini?</p>
-                    <div class="flex gap-2 justify-center">
-                        <button id="btn-delete-yes" class="retro-btn bg-retro-red text-white px-4 py-1.5 text-xs">YA, HAPUS</button>
-                        <button id="btn-delete-no" class="retro-btn bg-white text-black px-4 py-1.5 text-xs">BATAL</button>
-                    </div>
-                </div>
-
-                <!-- Back to Scan QR Panel (Tampil setelah konfirmasi drop permanen) -->
-                <div id="back-to-scan-panel" class="retro-card bg-retro-blue p-4 max-w-xs shadow-retro font-bold text-center pointer-events-auto hidden">
-                    <p class="text-xs text-white mb-2 font-bold">Tanaman berhasil diletakkan!</p>
-                    <button id="btn-back-to-scan" class="retro-btn bg-white text-black px-6 py-2 text-xs w-full font-bold">KEMBALI KE SCAN QR</button>
-                </div>
-
+            
+            <div class="text-center mt-auto mb-10 pointer-events-none">
                 <!-- Drop Mode Drawer -->
                 <div id="drop-drawer" class="flex gap-3 overflow-x-auto pb-4 mb-2 max-w-full snap-x pointer-events-auto w-full">
                     <!-- Drawer items populated by JS -->

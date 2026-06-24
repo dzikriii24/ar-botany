@@ -107,6 +107,54 @@ AFRAME.registerComponent('botani-hit-test', {
     }
 });
 
+// Komponen A-Frame untuk menampilkan Model 3D Prosedural Three.js
+AFRAME.registerComponent('plant-3d', {
+    schema: {
+        type: { type: 'string', default: 'ulin' }
+    },
+    init: function () {
+        if (window.PlantModels && typeof window.PlantModels.createModel === 'function') {
+            try {
+                // Buat model Three.js prosedural
+                const model = window.PlantModels.createModel(this.data.type);
+                
+                // Tambahkan model ke A-Frame Object3D hierarchy
+                this.el.setObject3D('mesh', model);
+                
+                // Set skala default agar pas di dunia nyata (sekitar 0.6 meter tinggi)
+                this.el.setAttribute('scale', '0.6 0.6 0.6');
+            } catch (e) {
+                console.error("Gagal merender model 3D di A-Frame:", e);
+            }
+        } else {
+            console.warn("Library PlantModels tidak ditemukan.");
+        }
+    }
+});
+
+// Komponen A-Frame untuk mendeteksi klik pada tanaman dan memicu pop-up deskripsi
+AFRAME.registerComponent('clickable-plant', {
+    schema: {
+        name: { type: 'string', default: 'Tanaman' },
+        region: { type: 'string', default: 'Indonesia' },
+        desc: { type: 'string', default: 'Deskripsi tidak tersedia.' }
+    },
+    init: function () {
+        // Event listener klik / sentuh
+        this.el.addEventListener('click', (evt) => {
+            evt.stopPropagation();
+            
+            const popup = document.getElementById('plant-desc-popup');
+            if (popup) {
+                document.getElementById('popup-plant-title').innerText = this.data.name;
+                document.getElementById('popup-plant-region').innerText = `Asal: ${this.data.region}`;
+                document.getElementById('popup-plant-desc').innerText = this.data.desc;
+                popup.classList.remove('hidden');
+            }
+        });
+    }
+});
+
 AFRAME.registerComponent('drop-handler', {
     init: function () {
         console.log("[Drop Handler] Komponen drop-handler berhasil diinisialisasi pada scene.");
@@ -165,61 +213,15 @@ AFRAME.registerComponent('drop-handler', {
 
         // Gunakan fungsi terpusat untuk melempar objek
         const performDrop = (e) => {
-            console.log("[Drop Handler] Event terpicu:", e ? e.type : "manual");
-
-            // CEK BLOCKER GLOBAL
-            if (window.blockArDropThisFrame) {
-                console.log("[Drop Handler] Drop dibatalkan karena terblokir oleh interaksi UI.");
-                return;
-            }
-
-            const isArMode = this.el.sceneEl.is('ar-mode');
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            
-            // HP FIX: Pada perangkat mobile, hanya izinkan drop jika sudah masuk ke mode AR.
-            if (isMobile && !isArMode) {
-                console.log("[Drop Handler] Mengabaikan ketukan di HP karena belum masuk ke mode AR.");
-                return;
-            }
-
-            // MENCEGAH DOUBLE SPAM: Jika sedang di AR-mode, abaikan click/touchstart biasa dari window.
-            if (isArMode && e && (e.type === 'click' || e.type === 'touchstart')) {
-                console.log("[Drop Handler] Mengabaikan event " + e.type + " di AR-mode karena 'select' yang akan memproses.");
-                return;
-            }
-
-            // Jika sedang dalam tahap konfirmasi drop objek sebelumnya, abaikan ketukan baru!
-            if (this.tempStandee) {
-                console.log("[Drop Handler] Sedang menunggu konfirmasi penempatan objek. Mengabaikan ketukan baru.");
-                return;
-            }
-
-            // Jika sedang dalam tahap konfirmasi hapus objek, batalkan pilihan (deselect) dan abaikan drop baru
-            if (this.selectedStandee) {
-                console.log("[Drop Handler] Sedang dalam konfirmasi penghapusan objek. Membatalkan pilihan.");
-                deselectForDeletion();
-                return;
-            }
-
-            // Jika yang diklik adalah UI (laci, tombol, navbar, panel konfirmasi), abaikan!
-            if (e && e.target && typeof e.target.closest === 'function') {
-                if (e.target.closest('.pointer-events-auto') || e.target.closest('nav') || e.target.closest('button') || e.target.closest('.a-enter-vr-button')) {
-                    console.log("[Drop Handler] Tap terdeteksi pada elemen UI / Tombol AR. Drop dibatalkan.");
+            // Jika yang diklik adalah UI (laci, tombol, navbar, popup), abaikan!
+            if (e && e.target) {
+                if (e.target.closest('.pointer-events-auto') || e.target.closest('nav') || e.target.closest('button')) {
                     return;
                 }
             }
             
-            // JIKA kursor/raycaster mengarah ke objek .collidable yang sudah ada, jangan drop objek baru!
-            const cameraRig = document.querySelector('[camera]');
-            const raycaster = cameraRig ? cameraRig.components.raycaster : null;
-            if (raycaster && raycaster.intersectedEls.length > 0) {
-                console.log("[Drop Handler] Tap menabrak objek yang sudah ada. Mengabaikan pembuatan objek baru.");
-                return;
-            }
-            
-            // Check if user has selected an image from the drawer
+            // Periksa apakah user sudah memilih tanaman di laci
             if (!window.activeDropImage) {
-                console.warn("[Drop Handler] Drop dibatalkan karena belum ada gambar tanaman yang dipilih dari laci.");
                 if (e) alert("Pilih gambar dari laci koleksi di bawah terlebih dahulu!");
                 return;
             }
@@ -236,46 +238,65 @@ AFRAME.registerComponent('drop-handler', {
                 const cameraObj = cameraRig.object3D;
                 const pos = new THREE.Vector3(0, 0, -1.5);
                 pos.applyMatrix4(cameraObj.matrixWorld);
-                
-                if (this.lastGroundY !== undefined && this.lastGroundY !== null) {
-                    pos.y = this.lastGroundY;
-                } else {
-                    pos.y = cameraObj.position.y - 1.5;
-                }
+                pos.y -= 0.5; // Turunkan sedikit agar terlihat seperti di lantai
                 position = pos;
             }
             
-            // Sembunyikan panel kembali ke scan QR jika terbuka
-            if (backToScanPanel) backToScanPanel.classList.add('hidden');
-            
-            // 1. Buat kontainer standee sebagai PREVIEW
+            // Buat entitas kontainer jangkar (anchor)
             const standee = document.createElement('a-entity');
             standee.setAttribute('position', `${position.x} ${position.y} ${position.z}`);
             
-            // 2. Buat gambar standee (2D billboard) dengan opacity 0.5 (semi-transparan)
-            const img = document.createElement('a-image');
-            img.setAttribute('src', window.activeDropImage);
-            img.setAttribute('crossorigin', 'anonymous');
-            img.setAttribute('width', '0.5'); 
-            img.setAttribute('height', '0.5');
-            img.setAttribute('position', '0 0.25 0');
-            img.setAttribute('opacity', '0.6'); // Semi-transparan untuk preview
-            img.setAttribute('transparent', 'true');
-            img.setAttribute('look-at', '[camera]');
+            // JIKA ini tanaman endemik (memiliki 3D Model prosedural)
+            if (window.activeDropPlantId) {
+                const details = window.PlantModels.getDetails(window.activeDropPlantId);
+                standee.setAttribute('clickable-plant', `name: ${details.name}; region: ${details.region}; desc: ${details.desc}`);
 
-            // 3. Buat base box berwarna KUNING untuk menandakan preview/konfirmasi
-            const baseBox = document.createElement('a-box');
-            baseBox.setAttribute('color', '#F5D76E'); // Kuning untuk konfirmasi
-            baseBox.setAttribute('depth', '0.2');
-            baseBox.setAttribute('height', '0.05');
-            baseBox.setAttribute('width', '0.5');
-            baseBox.setAttribute('position', '0 0.025 0');
+                // 1. Buat alas rumput bulat hijau di lantai
+                const baseBox = document.createElement('a-cylinder');
+                baseBox.setAttribute('color', '#4CAF50');
+                baseBox.setAttribute('radius', '0.25');
+                baseBox.setAttribute('height', '0.02');
+                baseBox.setAttribute('position', '0 0.01 0');
+                baseBox.classList.add('collidable');
+                standee.appendChild(baseBox);
+
+                // 2. Buat objek 3D tanaman
+                const plant = document.createElement('a-entity');
+                plant.setAttribute('plant-3d', `type: ${window.activeDropPlantId}`);
+                plant.setAttribute('position', '0 0.02 0');
+                plant.classList.add('collidable');
+                standee.appendChild(plant);
+
+            } else {
+                // FALLBACK: JIKA ini karya pengguna (gambar hasil menggambar di Canvas)
+                const plantName = window.activeDropPlantName || 'Karya Tanaman';
+                const plantDesc = window.activeDropPlantDesc || 'Hasil lukisan kreatif dari kanvas digital.';
+                const plantRegion = window.activeDropPlantRegion || 'Galeri Pengguna';
+                standee.setAttribute('clickable-plant', `name: ${plantName}; region: ${plantRegion}; desc: ${plantDesc}`);
+
+                // Buat 2D billboard (Pop-up Book effect)
+                const img = document.createElement('a-image');
+                img.setAttribute('src', window.activeDropImage);
+                img.setAttribute('width', '0.5'); 
+                img.setAttribute('height', '0.5');
+                img.setAttribute('position', '0 0.25 0'); // Berdiri di atas lantai
+                img.setAttribute('look-at', '[camera]');
+                img.classList.add('collidable');
+
+                // Alas kotak hijau
+                const baseBox = document.createElement('a-box');
+                baseBox.setAttribute('color', '#4CAF50');
+                baseBox.setAttribute('depth', '0.2');
+                baseBox.setAttribute('height', '0.05');
+                baseBox.setAttribute('width', '0.5');
+                baseBox.setAttribute('position', '0 0.025 0');
+                baseBox.classList.add('collidable');
+                
+                standee.appendChild(baseBox);
+                standee.appendChild(img);
+            }
             
-            // Hubungkan elemen
-            standee.appendChild(baseBox);
-            standee.appendChild(img);
-            
-            // Tambahkan ke scene
+            // Tempelkan entitas ke scene A-Frame
             this.el.sceneEl.appendChild(standee);
             this.tempStandee = standee;
             
@@ -462,38 +483,7 @@ AFRAME.registerComponent('drop-handler', {
             }
             this.isAutoPreview = false;
             
-            if (dropConfirmPanel) dropConfirmPanel.classList.add('hidden');
-            if (deleteConfirmPanel) deleteConfirmPanel.classList.add('hidden');
-            if (backToScanPanel) backToScanPanel.classList.add('hidden');
-            
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('id') || urlParams.get('url')) {
-                console.log("[Drop Handler] Garden dibersihkan, dialihkan kembali ke QR Scan.");
-                window.location.href = 'index.html';
-                return;
-            }
-            
-            if (dropDrawer) dropDrawer.classList.remove('hidden');
-            if (dropInstructions) dropInstructions.classList.remove('hidden');
-            
-            updateClearAllButtonVisibility();
-            showFlashMessage("GARDEN CLEARED!", "bg-retro-red");
-        };
-
-        // Fungsi memperbarui visibilitas tombol Hapus Semua
-        const updateClearAllButtonVisibility = () => {
-            const hasPlaced = document.querySelectorAll('.collidable').length > 0;
-            if (btnClearAll) {
-                if (hasPlaced && !this.tempStandee && !this.selectedStandee) {
-                    btnClearAll.classList.remove('hidden');
-                } else {
-                    btnClearAll.classList.add('hidden');
-                }
-            }
-        };
-
-        // Fungsi menampilkan notifikasi flash kustom
-        const showFlashMessage = (text, bgColorClass) => {
+            // Flash feedback "DROPPED!"
             const flash = document.createElement('div');
             flash.innerText = text;
             flash.className = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 ${bgColorClass} text-white font-bold px-6 py-3 rounded-lg border-4 border-black shadow-retro z-[999999] pointer-events-none transition-opacity duration-1000`;
@@ -502,23 +492,8 @@ AFRAME.registerComponent('drop-handler', {
             setTimeout(() => flash.remove(), 1500);
         };
 
-        // Pasang event klik pada tombol konfirmasi UI
-        if (btnConfirmYes) btnConfirmYes.onclick = confirmPlace;
-        if (btnConfirmNo) btnConfirmNo.onclick = cancelPlace;
-        
-        if (btnDeleteYes) btnDeleteYes.onclick = confirmDelete;
-        if (btnDeleteNo) btnDeleteNo.onclick = deselectForDeletion;
-        
-        if (btnClearAll) btnClearAll.onclick = clearAllObjects;
-        
-        if (btnBackToScan) {
-            btnBackToScan.onclick = () => {
-                console.log("[Drop Handler] Mengalihkan kembali ke QR Scanner page.");
-                window.location.href = 'index.html';
-            };
-        }
-
-        // Daftarkan event listener standar pada window untuk pengujian non-AR (desktop/laptop/tablet simulator)
+        // Daftarkan semua jenis event tap/click
+        this.el.sceneEl.addEventListener('select', performDrop);
         window.addEventListener('touchstart', performDrop, { passive: false });
         window.addEventListener('click', performDrop);
 
