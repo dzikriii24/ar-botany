@@ -76,12 +76,13 @@
 </head>
 <body class="m-0 overflow-hidden text-gray-900 bg-retro-bg">
 
+
     <!-- AR Scene (WebXR Hit Test) -->
     <div id="ar-container" class="w-full h-full absolute inset-0 z-0">
-        <a-scene webxr="optionalFeatures: hit-test, dom-overlay; overlayElement: #scanner-ui;" drop-handler>
-            <a-entity custom-ar-hit-test="target:#reticle"></a-entity>
+        <a-scene webxr="optionalFeatures: hit-test, local-floor, dom-overlay; overlayElement: #scanner-ui;" drop-handler>
+            <a-entity botani-hit-test="target:#reticle"></a-entity>
             <a-entity id="reticle" geometry="primitive: ring; radiusInner: 0.15; radiusOuter: 0.2" material="color: #FF4081; shader: flat" rotation="-90 0 0" visible="false"></a-entity>
-            <a-entity camera look-controls cursor="rayOrigin: mouse" raycaster="objects: .collidable"></a-entity>
+            <a-entity camera raycaster="objects: .collidable" cursor="rayOrigin: mouse"></a-entity>
         </a-scene>
         
         <!-- AR Overlay UI -->
@@ -98,17 +99,19 @@
             
             <div class="text-center mt-auto mb-10 pointer-events-none">
                 <!-- Drop Mode Drawer -->
-                <div id="drop-drawer" class="flex gap-3 overflow-x-auto pb-4 mb-2 max-w-full snap-x pointer-events-auto">
+                <div id="drop-drawer" class="flex gap-3 overflow-x-auto pb-4 mb-2 max-w-full snap-x pointer-events-auto w-full">
                     <!-- Drawer items populated by JS -->
                 </div>
                 
-                <div class="retro-card bg-white inline-block px-4 py-2 mx-auto text-xs md:text-sm font-bold shadow-retro text-left max-w-sm">
-                    <p class="mb-1 text-retro-pink">CARA DROP (Hanya dari HP):</p>
+                <div id="drop-instructions" class="retro-card bg-white inline-block px-4 py-2 mx-auto text-xs md:text-sm font-bold shadow-retro text-left max-w-sm">
+                    <p class="mb-1 text-retro-pink">CARA DROP & HAPUS (Hanya dari HP):</p>
                     <ol class="list-decimal pl-4 text-[10px] md:text-xs space-y-1">
                         <li>Buka halaman ini dari HP (Chrome/Safari).</li>
                         <li>Pilih gambar dari laci koleksi di bawah.</li>
                         <li>Klik tombol <b>"AR"</b> di pojok kanan bawah.</li>
                         <li>Arahkan kamera ke lantai sampai muncul cincin <i>pink</i>, lalu <b>ketuk layar (tap)</b>!</li>
+                        <li>Tekan <b>"YA, PLACE"</b> untuk meletakkan tanaman atau <b>"BATAL"</b>.</li>
+                        <li>Ketuk objek tanaman yang sudah diletakkan untuk **menghapusnya**.</li>
                     </ol>
                 </div>
             </div>
@@ -156,6 +159,23 @@
                 </p>
             </div>
             <p id="auth-message" class="mt-4 text-center font-bold text-sm hidden"></p>
+        </div>
+    <!-- Full-screen AR Tap-to-Start Blocker -->
+    <div id="ar-start-modal" class="fixed inset-0 z-[100] bg-black bg-opacity-90 hidden flex flex-col items-center justify-center p-4 cursor-pointer pointer-events-auto">
+        <div class="text-center flex flex-col gap-4 items-center pointer-events-none">
+            <h2 class="font-pixel text-lg text-retro-yellow animate-pulse">TANAMAN TERDETEKSI!</h2>
+            <div id="ar-start-plant-img" class="w-36 h-36 border-4 border-black rounded overflow-hidden bg-white shadow-retro flex items-center justify-center">
+                <!-- Plant thumbnail populated by JS -->
+            </div>
+            <div>
+                <p id="ar-start-plant-name" class="font-bold text-xl uppercase tracking-wider text-white">...</p>
+                <p class="text-xs text-gray-300 mt-2 leading-relaxed max-w-xs">
+                    Tanaman berhasil diidentifikasi. Ketuk layar di mana saja untuk membuka kamera AR dan menempatkannya.
+                </p>
+            </div>
+            <p class="font-pixel text-[10px] text-retro-pink mt-6 tracking-tighter">
+                [ KETUK LAYAR UNTUK MEMULAI AR ]
+            </p>
         </div>
     </div>
 
