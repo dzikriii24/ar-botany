@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Draw - WebAR Botani Interaktif</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        retro: {
+                            red: '#F0523C',
+                            blue: '#4A90E2',
+                            yellow: '#F5D76E',
+                            green: '#7ED321',
+                            purple: '#BD10E0',
+                            pink: '#FF4081',
+                            bg: '#FDF7E5',
+                        }
+                    },
+                    boxShadow: {
+                        'retro': '4px 4px 0px 0px rgba(0,0,0,1)',
+                        'retro-hover': '2px 2px 0px 0px rgba(0,0,0,1)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Outfit:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #FDF7E5; /* retro-bg */
+        }
+
+        .font-pixel {
+            font-family: 'Press Start 2P', cursive;
+            line-height: 1.5;
+        }
+
+        .retro-card {
+            border: 4px solid #000;
+            border-radius: 8px;
+            box-shadow: 4px 4px 0px 0px #000;
+            transition: all 0.2s ease-in-out;
+            background-color: #fff;
+            color: #000;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .retro-btn {
+            border: 3px solid #000;
+            border-radius: 4px;
+            box-shadow: 3px 3px 0px 0px #000;
+            transition: all 0.1s ease-in-out;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+
+        .retro-btn:active {
+            transform: translate(3px, 3px);
+            box-shadow: 0px 0px 0px 0px #000;
+        }
+    </style>
+</head>
+<body class="m-0 text-gray-900 bg-retro-bg">
+
+    <!-- Navigation Bar -->
+    <div class="sticky top-0 z-50">
+        <nav class="bg-white border-b-4 border-black p-4 flex flex-wrap justify-between items-center shadow-md gap-2">
+            <h1 class="font-pixel text-xl tracking-tighter cursor-pointer" onclick="window.location.href='index.html'">BOTANI<span class="text-retro-green">.AR</span></h1>
+            <div class="flex gap-2 flex-wrap">
+                <button onclick="window.location.href='index.html'" class="retro-btn bg-retro-blue text-white px-3 py-1 text-sm">SCAN QR</button>
+                <button onclick="window.location.href='drop.html'" class="retro-btn bg-retro-purple text-white px-3 py-1 text-sm">DROP</button>
+                <button onclick="window.location.href='collection.html'" class="retro-btn bg-retro-yellow px-3 py-1 text-sm">COLLECTION</button>
+                <button onclick="window.location.href='draw.html'" class="retro-btn bg-retro-pink text-white px-3 py-1 text-sm">DRAW</button>
+                <button id="auth-btn" onclick="window.handleAuthBtnClick()" class="retro-btn bg-gray-200 px-3 py-1 text-sm">LOGIN</button>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="container mx-auto p-4 max-w-5xl mt-8">
+        <!-- Draw View -->
+        <div id="view-draw">
+            <div class="max-w-3xl mx-auto">
+                <h2 class="text-3xl font-black uppercase mb-6 text-center" style="-webkit-text-stroke: 1px black; color: white; text-shadow: 3px 3px 0 #000;">Draw a Plant</h2>
+                
+                <div class="retro-card bg-white p-4 mb-6">
+                    <div class="flex flex-wrap gap-4 mb-4 justify-between items-center">
+                        <div class="flex gap-2 items-center">
+                            <label class="font-bold text-sm">Color:</label>
+                            <input type="color" id="colorPicker" value="#22c55e" class="w-10 h-10 border-2 border-black cursor-pointer rounded">
+                        </div>
+                        <div class="flex gap-2 items-center">
+                            <label class="font-bold text-sm">Brush Size:</label>
+                            <input type="range" id="brushSize" min="1" max="20" value="5" class="accent-retro-pink">
+                        </div>
+                        <button onclick="clearCanvas()" class="retro-btn bg-gray-200 px-4 py-2 text-sm">Clear Board</button>
+                    </div>
+                    
+                    <div class="border-4 border-black rounded relative bg-[#fdfdfd] cursor-crosshair overflow-hidden" style="height: 400px;">
+                        <canvas id="paintCanvas" class="absolute inset-0 w-full h-full touch-none"></canvas>
+                    </div>
+
+                    <div class="mt-6 flex flex-col gap-4">
+                        <input type="text" id="plantNameInput" placeholder="Nama Tanaman..." class="w-full border-4 border-black rounded px-4 py-2 font-bold focus:outline-none focus:border-retro-pink">
+                        <textarea id="plantDescInput" placeholder="Deskripsi tanaman (opsional)..." rows="2" class="w-full border-4 border-black rounded px-4 py-2 font-bold focus:outline-none focus:border-retro-pink"></textarea>
+                        <button onclick="saveCanvas(event)" class="retro-btn bg-retro-green text-white px-8 py-3 text-lg w-full sm:w-auto self-end">Save & Share</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="fixed inset-0 z-[100] bg-black bg-opacity-70 hidden flex items-center justify-center p-4">
+        <div class="retro-card bg-retro-yellow p-6 md:p-8 max-w-md w-full relative">
+            <button onclick="window.toggleAuthModal()" class="absolute top-2 right-2 w-8 h-8 flex items-center justify-center retro-btn bg-white font-black text-xl leading-none">&times;</button>
+            <h2 id="auth-title" class="font-pixel text-xl mb-6 text-center">LOGIN</h2>
+            
+            <form id="auth-form" onsubmit="window.handleAuth(event)" class="flex flex-col gap-4">
+                <div>
+                    <label class="block font-bold mb-1">Email</label>
+                    <input type="email" id="auth-email" required class="w-full border-4 border-black rounded px-3 py-2">
+                </div>
+                <div>
+                    <label class="block font-bold mb-1">Password</label>
+                    <input type="password" id="auth-password" required class="w-full border-4 border-black rounded px-3 py-2">
+                </div>
+                
+                <div class="mt-2">
+                    <button type="submit" id="auth-submit-btn" onclick="window.setAuthAction('login')" class="retro-btn bg-retro-blue text-white w-full py-3 text-lg">Login</button>
+                </div>
+            </form>
+            <div class="mt-4 text-center">
+                <p class="text-sm font-bold">
+                    <span id="auth-toggle-desc">Belum punya akun?</span> 
+                    <button onclick="window.toggleAuthMode()" id="auth-toggle-btn" class="text-retro-blue cursor-pointer underline hover:text-retro-pink bg-transparent border-none p-0 ml-1">Daftar di sini</button>
+                </p>
+            </div>
+            <p id="auth-message" class="mt-4 text-center font-bold text-sm hidden"></p>
+        </div>
+    </div>
+
+    <script type="module" src="js/supabase-db.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        // Check session and init canvas
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (typeof setupCanvasDrawing === 'function') {
+                    setupCanvasDrawing();
+                }
+            }, 300); // Give enough time for module execution and DOM paints
+        });
+    </script>
+</body>
+</html>

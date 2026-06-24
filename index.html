@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Scanner - WebAR Botani Interaktif</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        retro: {
+                            red: '#F0523C',
+                            blue: '#4A90E2',
+                            yellow: '#F5D76E',
+                            green: '#7ED321',
+                            purple: '#BD10E0',
+                            pink: '#FF4081',
+                            bg: '#FDF7E5',
+                        }
+                    },
+                    boxShadow: {
+                        'retro': '4px 4px 0px 0px rgba(0,0,0,1)',
+                        'retro-hover': '2px 2px 0px 0px rgba(0,0,0,1)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Outfit:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #000;
+        }
+
+        .font-pixel {
+            font-family: 'Press Start 2P', cursive;
+            line-height: 1.5;
+        }
+
+        .retro-card {
+            border: 4px solid #000;
+            border-radius: 8px;
+            box-shadow: 4px 4px 0px 0px #000;
+            transition: all 0.2s ease-in-out;
+            background-color: #fff;
+            color: #000;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .retro-card:hover {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0px 0px #000;
+        }
+
+        .retro-btn {
+            border: 3px solid #000;
+            border-radius: 4px;
+            box-shadow: 3px 3px 0px 0px #000;
+            transition: all 0.1s ease-in-out;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+
+        .retro-btn:active {
+            transform: translate(3px, 3px);
+            box-shadow: 0px 0px 0px 0px #000;
+        }
+    </style>
+    <!-- HTML5 QR Code Scanner -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body class="m-0 overflow-hidden text-gray-900 bg-retro-bg">
+
+    <!-- QR Scanner Scene -->
+    <div id="ar-container" class="w-full h-full absolute inset-0 z-0 bg-black flex flex-col justify-center items-center pt-20">
+        <div id="reader" style="width: 100%; max-width: 500px;" class="border-4 border-retro-green rounded-lg bg-white overflow-hidden"></div>
+        <p id="scan-result" class="text-white mt-4 font-bold text-center px-4"></p>
+    </div>
+    
+    <!-- AR Overlay UI -->
+    <div id="scanner-ui" class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4">
+        <div class="flex justify-between items-start pointer-events-auto mt-20">
+            <button onclick="window.location.href='collection.html'" class="retro-btn bg-white px-4 py-2 text-sm">
+                Collection
+            </button>
+            <div id="plant-info-badge" class="retro-card bg-retro-yellow px-4 py-2 text-center max-w-xs hidden">
+                <h2 id="plant-info-title" class="font-bold text-lg mb-1">...</h2>
+                <p id="plant-info-desc" class="text-xs">...</p>
+            </div>
+            <button onclick="window.location.href='draw.html'" class="retro-btn bg-retro-pink text-white px-4 py-2 text-sm">
+                Draw
+            </button>
+        </div>
+        
+        <div class="pointer-events-auto text-center mb-8">
+            <div class="retro-card bg-white inline-block px-4 py-2 mx-auto text-sm font-bold shadow-retro">
+                [ Arahkan kamera ke QR Code ]
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Bar Overlay -->
+    <div class="absolute top-0 left-0 right-0 z-50">
+        <nav class="bg-white border-b-4 border-black p-4 flex flex-wrap justify-between items-center shadow-md gap-2">
+            <h1 class="font-pixel text-xl tracking-tighter cursor-pointer" onclick="window.location.href='index.html'">BOTANI<span class="text-retro-green">.AR</span></h1>
+            <div class="flex gap-2 flex-wrap">
+                <button onclick="window.location.href='index.html'" class="retro-btn bg-retro-blue text-white px-3 py-1 text-sm">SCAN QR</button>
+                <button onclick="window.location.href='drop.html'" class="retro-btn bg-retro-purple text-white px-3 py-1 text-sm">DROP</button>
+                <button onclick="window.location.href='collection.html'" class="retro-btn bg-retro-yellow px-3 py-1 text-sm">COLLECTION</button>
+                <button onclick="window.location.href='draw.html'" class="retro-btn bg-retro-pink text-white px-3 py-1 text-sm">DRAW</button>
+                <button id="auth-btn" onclick="window.handleAuthBtnClick()" class="retro-btn bg-gray-200 px-3 py-1 text-sm">LOGIN</button>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="fixed inset-0 z-[100] bg-black bg-opacity-70 hidden flex items-center justify-center p-4">
+        <div class="retro-card bg-retro-yellow p-6 md:p-8 max-w-md w-full relative">
+            <button onclick="window.toggleAuthModal()" class="absolute top-2 right-2 w-8 h-8 flex items-center justify-center retro-btn bg-white font-black text-xl leading-none">&times;</button>
+            <h2 id="auth-title" class="font-pixel text-xl mb-6 text-center">LOGIN</h2>
+            
+            <form id="auth-form" onsubmit="window.handleAuth(event)" class="flex flex-col gap-4">
+                <div>
+                    <label class="block font-bold mb-1">Email</label>
+                    <input type="email" id="auth-email" required class="w-full border-4 border-black rounded px-3 py-2">
+                </div>
+                <div>
+                    <label class="block font-bold mb-1">Password</label>
+                    <input type="password" id="auth-password" required class="w-full border-4 border-black rounded px-3 py-2">
+                </div>
+                
+                <div class="mt-2">
+                    <button type="submit" id="auth-submit-btn" onclick="window.setAuthAction('login')" class="retro-btn bg-retro-blue text-white w-full py-3 text-lg">Login</button>
+                </div>
+            </form>
+            <div class="mt-4 text-center">
+                <p class="text-sm font-bold">
+                    <span id="auth-toggle-desc">Belum punya akun?</span> 
+                    <button onclick="window.toggleAuthMode()" id="auth-toggle-btn" class="text-retro-blue cursor-pointer underline hover:text-retro-pink bg-transparent border-none p-0 ml-1">Daftar di sini</button>
+                </p>
+            </div>
+            <p id="auth-message" class="mt-4 text-center font-bold text-sm hidden"></p>
+        </div>
+    </div>
+
+    <script type="module" src="js/supabase-db.js"></script>
+    <script src="js/ar-handler.js"></script>
+    <script src="js/app.js"></script>
+    <script>
+        // Check for URL parameters first
+        window.addEventListener('load', () => {
+            if (typeof window.initFromURL === 'function') {
+                window.initFromURL();
+            }
+
+            // Init QR Scanner
+            const html5QrCode = new Html5Qrcode("reader");
+            const config = { 
+                fps: 10, 
+                qrbox: { width: 250, height: 250 },
+                videoConstraints: {
+                    facingMode: "environment",
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+
+            html5QrCode.start({ facingMode: "environment" }, config,
+                (decodedText, decodedResult) => {
+                    document.getElementById('scan-result').innerText = "Berhasil! Membuka: " + decodedText;
+                    // Stop scanning
+                    html5QrCode.stop().then(() => {
+                        window.location.href = decodedText;
+                    }).catch(err => {
+                        console.error("Failed to stop scanner", err);
+                        window.location.href = decodedText;
+                    });
+                },
+                (errorMessage) => {
+                    // Ignore background scan errors
+                })
+            .catch((err) => {
+                document.getElementById('scan-result').innerText = "Gagal mengakses kamera: " + err;
+            });
+        });
+    </script>
+</body>
+</html>
