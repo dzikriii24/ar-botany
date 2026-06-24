@@ -12,6 +12,7 @@ const endemicPlants = [
     { id: 'kenanga', name: 'Kenanga', region: 'Jawa', stars: 3, color: 'bg-retro-yellow', img: '<img src="assets/images/kenanga.jpg" class="w-full h-full object-cover">' },
     { id: 'tanjung', name: 'Tanjung', region: 'Nasional', stars: 4, color: 'bg-retro-blue', img: '<img src="assets/images/tanjung.jpg" class="w-full h-full object-cover">' },
 ];
+window.endemicPlants = endemicPlants;
 
 const colors = ['bg-retro-red', 'bg-retro-blue', 'bg-retro-yellow', 'bg-retro-green', 'bg-retro-purple', 'bg-retro-pink'];
 
@@ -382,6 +383,32 @@ window.initDropMode = async function() {
         });
         const items = document.querySelectorAll('.drop-drawer-item');
         if (items[autoSelectIndex]) items[autoSelectIndex].click();
+
+        // Jika halaman dipanggil dengan parameter URL (dari QR Scan atau Collection)
+        if (targetId || targetUrl) {
+            const detectedPlant = allPlants[autoSelectIndex];
+            if (detectedPlant) {
+                const arStartModal = document.getElementById('ar-start-modal');
+                const arStartPlantName = document.getElementById('ar-start-plant-name');
+                const arStartPlantImg = document.getElementById('ar-start-plant-img');
+                
+                if (arStartModal && arStartPlantName && arStartPlantImg) {
+                    arStartPlantName.innerText = detectedPlant.plant_name;
+                    const objectFit = detectedPlant.is_endemic ? 'object-cover' : 'object-contain';
+                    arStartPlantImg.innerHTML = `<img src="${detectedPlant.image_url}" class="w-full h-full ${objectFit}">`;
+                    arStartModal.classList.remove('hidden');
+                    
+                    arStartModal.onclick = () => {
+                        arStartModal.classList.add('hidden');
+                        const scene = document.querySelector('a-scene');
+                        if (scene) {
+                            console.log("[AR Launcher] Memulai sesi WebXR AR melalui gesture pengguna...");
+                            scene.enterAR(); // Masuk ke mode AR A-Frame/WebXR
+                        }
+                    };
+                }
+            }
+        }
     } else {
         drawer.innerHTML = '<p class="text-white font-bold text-sm px-4 whitespace-nowrap self-center">Belum ada karya komunitas.</p>';
     }
